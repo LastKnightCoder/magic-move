@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>algo-viz demos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    header { padding: 24px 32px; border-bottom: 1px solid #1e293b; }
+    header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
+    header p { font-size: 13px; color: #64748b; margin-top: 4px; }
+    nav { display: flex; gap: 8px; padding: 16px 32px; border-bottom: 1px solid #1e293b; flex-wrap: wrap; }
+    nav button {
+      padding: 6px 14px; border-radius: 6px; border: 1px solid #334155;
+      background: #1e293b; color: #94a3b8; font-size: 13px; cursor: pointer; transition: all 0.15s;
+    }
+    nav button:hover { border-color: #6366f1; color: #e2e8f0; }
+    nav button.active { background: #6366f1; border-color: #6366f1; color: #fff; }
+    main { padding: 32px; }
+    .demo-section { display: none; }
+    .demo-section.active { display: block; }
+    .demo-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #f1f5f9; }
+    .demo-section p { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+    .canvas-wrap { background: #f8fafc; border-radius: 12px; overflow: hidden; display: block; width: 100%; }
+    .controls { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .controls button {
+      padding: 8px 18px; border-radius: 8px; border: none;
+      background: #6366f1; color: #fff; font-size: 13px; cursor: pointer; transition: opacity 0.15s;
+    }
+    .controls button:hover { opacity: 0.85; }
+    .controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+    canvas { display: block; width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>algo-viz</h1>
+    <p>基于 LeaferJS 的算法可视化动画引擎</p>
+  </header>
+  <nav id="nav"></nav>
+  <main id="main"></main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

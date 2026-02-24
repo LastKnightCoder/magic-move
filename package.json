@@ -1,0 +1,76 @@
+{
+  "name": "algo-viz",
+  "version": "0.1.0",
+  "description": "Algorithm visualization animation engine, inspired by manim, built on LeaferJS",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/core/index.js",
+      "types": "./dist/core/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react/index.js",
+      "types": "./dist/react/index.d.ts"
+    },
+    "./data-structures": {
+      "import": "./dist/data-structures/index.js",
+      "types": "./dist/data-structures/index.d.ts"
+    },
+    "./text": {
+      "import": "./dist/text/index.js",
+      "types": "./dist/text/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "demo": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@leafer-in/animate": "^2.0.1",
+    "leafer-ui": "^2.0.1",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@leafer-in/animate": "^2.0.1",
+    "@types/d3-force": "^3.0.0",
+    "@types/opentype.js": "^1.3.9",
+    "@types/react": "^18.3.0",
+    "d3-force": "^3.0.0",
+    "leafer-ui": "^2.0.1",
+    "playwright": "^1.58.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "dependencies": {
+    "@leafer/core": "^2.0.1",
+    "mathjax-full": "^3.2.2",
+    "mupdf": "^1.27.0",
+    "opentype.js": "^1.3.4",
+    "svgpath": "^2.6.0"
+  }
+}

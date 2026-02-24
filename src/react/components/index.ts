@@ -1,0 +1,6 @@
+export { Text } from './Text'
+export { TextMorph } from './TextMorph'
+export { StepControls } from './StepControls'
+export type { TextProps } from './Text'
+export type { TextMorphProps } from './TextMorph'
+export type { StepControlsProps } from './StepControls'
