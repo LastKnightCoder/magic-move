@@ -8,6 +8,14 @@ export interface DemoConfig {
   run: (canvas: HTMLCanvasElement) => Promise<void | DemoCleanup>
 }
 
+export interface StepperDemoSetupResult {
+  stepper: Stepper
+  descriptions?: string[]
+  intro?: string
+  cleanup?: DemoCleanup
+  onStepChange?: (state: StepperState) => void
+}
+
 const demos: DemoConfig[] = []
 
 export function registerDemo(title: string, slug: string, run: (canvas: HTMLCanvasElement) => Promise<void | DemoCleanup>) {
@@ -26,7 +34,9 @@ function renderNav() {
       nav.querySelectorAll('button').forEach((b) => b.classList.remove('active'))
       btn.classList.add('active')
       document.querySelectorAll('.demo-section').forEach((s) => s.classList.remove('active'))
-      document.getElementById(`demo-${btn.getAttribute('data-slug')}`)?.classList.add('active')
+      const activeSection = document.getElementById(`demo-${btn.getAttribute('data-slug')}`)
+      activeSection?.classList.add('active')
+      activeSection?.dispatchEvent(new CustomEvent('demo:activate'))
     })
   })
 }
@@ -102,7 +112,7 @@ function renderSection(demo: DemoConfig) {
 export function registerStepperDemo(
   title: string,
   slug: string,
-  setup: (canvas: HTMLCanvasElement) => Promise<Stepper>
+  setup: (canvas: HTMLCanvasElement) => Promise<StepperDemoSetupResult>
 ) {
   demos.push({ title, slug, run: async () => {} })
   renderNav()
@@ -112,7 +122,7 @@ export function registerStepperDemo(
 function renderStepperSection(
   title: string,
   slug: string,
-  setup: (canvas: HTMLCanvasElement) => Promise<Stepper>
+  setup: (canvas: HTMLCanvasElement) => Promise<StepperDemoSetupResult>
 ) {
   const main = document.getElementById('main')!
   const isFirst = demos.length === 1
@@ -123,23 +133,16 @@ function renderStepperSection(
 
   section.innerHTML = `<h2>${title}</h2>`
 
-  const canvas = document.createElement('canvas')
+  let canvas = document.createElement('canvas')
   canvas.width = 720
+
   const wrap = document.createElement('div')
   wrap.className = 'canvas-wrap'
   wrap.appendChild(canvas)
   section.appendChild(wrap)
 
-  const label = document.createElement('div')
-  label.className = 'stepper-label'
-  label.textContent = '点击"初始化"开始'
-  section.appendChild(label)
-
   const controls = document.createElement('div')
   controls.className = 'controls'
-
-  const initBtn = document.createElement('button')
-  initBtn.textContent = '▶ 初始化'
 
   const prevBtn = document.createElement('button')
   prevBtn.textContent = '← 上一步'
@@ -153,42 +156,61 @@ function renderStepperSection(
   resetBtn.textContent = '↺ 重置'
   resetBtn.disabled = true
 
-  controls.append(initBtn, prevBtn, nextBtn, resetBtn)
+  controls.append(prevBtn, nextBtn, resetBtn)
   section.appendChild(controls)
   main.appendChild(section)
 
   let stepper: Stepper | null = null
+  let onStepChange: ((state: StepperState) => void) | undefined
+  let initializing = false
 
   function updateUI(state: StepperState) {
     prevBtn.disabled = state.isFirst
     nextBtn.disabled = state.isLast
-    resetBtn.disabled = false
-    const idx = state.currentIndex
-    if (idx < 0) {
-      label.textContent = `共 ${state.totalSteps} 步，尚未开始`
-    } else {
-      label.textContent = `步骤 ${idx + 1} / ${state.totalSteps}：${state.currentLabel ?? ''}`
+    resetBtn.disabled = state.totalSteps === 0
+    onStepChange?.(state)
+  }
+
+  async function initialize() {
+    if (initializing) return
+    if (stepper) return
+
+    initializing = true
+    nextBtn.disabled = true
+    prevBtn.disabled = true
+    resetBtn.disabled = true
+
+    const ctx = canvas.getContext('2d')
+    ctx?.clearRect(0, 0, canvas.width, canvas.height)
+
+    try {
+      const result = await setup(canvas)
+      stepper = result.stepper
+      onStepChange = result.onStepChange
+
+      stepper.onStepChange = updateUI
+      updateUI({
+        currentIndex: -1,
+        totalSteps: stepper.totalSteps,
+        isFirst: true,
+        isLast: stepper.totalSteps === 0,
+      })
+
+      nextBtn.disabled = stepper.totalSteps === 0
+      prevBtn.disabled = true
+      resetBtn.disabled = stepper.totalSteps === 0
+    } finally {
+      initializing = false
     }
   }
 
-  initBtn.addEventListener('click', async () => {
-    initBtn.disabled = true
-    stepper = await setup(canvas)
-    stepper.onStepChange = updateUI
-    updateUI({
-      currentIndex: -1,
-      totalSteps: stepper.totalSteps,
-      isFirst: true,
-      isLast: false,
-    })
-    nextBtn.disabled = false
-    prevBtn.disabled = true
-    resetBtn.disabled = false
-    initBtn.textContent = '↺ 重新初始化'
-    initBtn.disabled = false
-  })
+  section.addEventListener('demo:activate', () => { void initialize() })
 
-  prevBtn.addEventListener('click', () => stepper?.prev())
-  nextBtn.addEventListener('click', () => stepper?.next())
-  resetBtn.addEventListener('click', () => stepper?.reset())
+  prevBtn.addEventListener('click', () => { void stepper?.prev() })
+  nextBtn.addEventListener('click', () => { void stepper?.next() })
+  resetBtn.addEventListener('click', () => { void stepper?.reset() })
+
+  if (isFirst) {
+    void initialize()
+  }
 }

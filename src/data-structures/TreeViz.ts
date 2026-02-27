@@ -1,4 +1,5 @@
 import { Ellipse, Line } from 'leafer-ui'
+import type { IUI } from 'leafer-ui'
 import type { Scene } from '../core/Scene'
 import type { AnimationOptions, HighlightOptions, VizState, NodeState } from '../core/types'
 import { BaseViz } from '../core/BaseViz'
@@ -66,6 +67,7 @@ export class TreeViz<T extends string | number> extends BaseViz {
 
   getState(): VizState {
     const state = super.getState()
+    const values = this._collectNodeValues()
     for (const [edgeId, binding] of this.edgeBindings) {
       const edgeState = state.nodes.get(edgeId)
       if (!edgeState) continue
@@ -75,13 +77,27 @@ export class TreeViz<T extends string | number> extends BaseViz {
         toId: binding.toId,
       }
     }
+    for (const [id, nodeState] of state.nodes) {
+      if (!id.startsWith('circle-') && !id.startsWith('label-')) continue
+      const nodeId = id.slice(id.indexOf('-') + 1)
+      const value = values.get(nodeId)
+      if (value === undefined) continue
+      const isCircle = id.startsWith('circle-')
+      nodeState.meta = {
+        ...(nodeState.meta ?? {}),
+        nodeId,
+        value,
+        text: String(value),
+        ...(isCircle ? { enterFromFill: this.opts.fillColor } : {}),
+      }
+    }
     return state
   }
 
   async applyState(state: VizState, options?: AnimationOptions): Promise<void> {
     const before = this.getState()
     this._restoreEdgeBindingsFromState(state)
-    this._ensureEdgeNodesFromState(state)
+    this._ensureNodesFromState(state)
     await MagicMove.animate(this.nodeMap, before, state, options)
     const { exit } = MagicMove.diff(before, state)
     for (const id of exit) this.unregister(id)
@@ -103,11 +119,16 @@ export class TreeViz<T extends string | number> extends BaseViz {
   }
 
   async highlight(id: string, color: string, opts?: HighlightOptions): Promise<void> {
-    await super.highlight(id, color, opts)
     const nodeId = this._nodeIdFromCircleId(id)
-    if (!nodeId) return
+    if (!nodeId) {
+      await super.highlight(id, color, opts)
+      return
+    }
+    await Promise.all([
+      super.highlight(id, color, opts),
+      this._applyLabelColor(nodeId, this._labelColorForFill(color), opts),
+    ])
     this._rememberCircleStyle(nodeId)
-    await this._applyLabelColor(nodeId, this._labelColorForFill(color), opts)
   }
 
   async unhighlight(id: string, opts?: AnimationOptions): Promise<void> {
@@ -458,29 +479,58 @@ export class TreeViz<T extends string | number> extends BaseViz {
     }
   }
 
-  private _ensureEdgeNodesFromState(state: VizState): void {
+  private _ensureNodesFromState(state: VizState): void {
     const firstNode = this._firstNodeInGroup()
     for (const [id, nodeState] of state.nodes) {
-      if (!id.startsWith('edge-')) continue
       if (this.nodeMap.has(id)) continue
-      const points = nodeState.points && nodeState.points.length >= 4 ? [...nodeState.points] : [0, 0, 0, 0]
-      const line = new Line({
-        points,
-        stroke: nodeState.stroke ?? this.opts.edgeColor,
-        strokeWidth: nodeState.strokeWidth ?? 2,
-        opacity: 0,
-      })
-      if (firstNode) {
-        this.group.addBefore(line, firstNode)
-      } else {
-        this.group.add(line)
+
+      if (id.startsWith('edge-')) {
+        const points = nodeState.points && nodeState.points.length >= 4 ? [...nodeState.points] : [0, 0, 0, 0]
+        const line = new Line({
+          points,
+          stroke: nodeState.stroke ?? this.opts.edgeColor,
+          strokeWidth: nodeState.strokeWidth ?? 2,
+          opacity: 0,
+        })
+        if (firstNode) {
+          this.group.addBefore(line, firstNode)
+        } else {
+          this.group.add(line)
+        }
+        this.nodeMap.set(id, line)
+        continue
       }
-      this.nodeMap.set(id, line)
+
+      if (id.startsWith('circle-')) {
+        const circle = new Ellipse({
+          x: nodeState.x,
+          y: nodeState.y,
+          width: nodeState.width,
+          height: nodeState.height,
+          fill: nodeState.fill ?? this.opts.fillColor,
+          stroke: nodeState.stroke ?? '#93c5fd',
+          strokeWidth: nodeState.strokeWidth ?? 2,
+          opacity: nodeState.opacity ?? 1,
+        })
+        this.register(id, circle)
+        continue
+      }
+
+      if (id.startsWith('label-')) {
+        const nodeId = id.slice('label-'.length)
+        const text = this._labelTextFromState(state, nodeId, nodeState)
+        const label = this.createCenteredLabel(
+          text,
+          { x: nodeState.x, y: nodeState.y, width: nodeState.width, height: nodeState.height },
+          { fontSize: this.opts.fontSize, fill: nodeState.fill ?? '#1e293b', opacity: nodeState.opacity ?? 1 }
+        )
+        this.registerLabel(id, label)
+      }
     }
   }
 
-  private _firstNodeInGroup(): unknown {
-    const group = this.group as unknown as { children?: unknown[] }
+  private _firstNodeInGroup(): IUI | null {
+    const group = this.group as unknown as { children?: IUI[] }
     const children = group.children
     if (!children || children.length === 0) return null
     return children[0] ?? null
@@ -623,6 +673,38 @@ export class TreeViz<T extends string | number> extends BaseViz {
     const label = this.nodeMap.get(`label-${nodeId}`)
     if (!label) return
     Object.assign(label as unknown as Record<string, unknown>, { fill })
+  }
+
+  private _labelTextFromState(state: VizState, nodeId: string, labelState: NodeState): string {
+    const labelMeta = labelState.meta
+    if (labelMeta && typeof labelMeta === 'object') {
+      const text = (labelMeta as Record<string, unknown>).text
+      if (typeof text === 'string' && text.length > 0) return text
+      const value = (labelMeta as Record<string, unknown>).value
+      if (typeof value === 'string' || typeof value === 'number') return String(value)
+    }
+
+    const circleState = state.nodes.get(`circle-${nodeId}`)
+    const circleMeta = circleState?.meta
+    if (circleMeta && typeof circleMeta === 'object') {
+      const value = (circleMeta as Record<string, unknown>).value
+      if (typeof value === 'string' || typeof value === 'number') return String(value)
+    }
+    return nodeId
+  }
+
+  private _collectNodeValues(): Map<string, T> {
+    const values = new Map<string, T>()
+    const walk = (node: TreeNodeData<T> | undefined): void => {
+      if (!node || values.has(node.id)) return
+      values.set(node.id, node.value)
+      walk(node.left)
+      walk(node.right)
+    }
+    for (const root of this._allRoots()) {
+      walk(root)
+    }
+    return values
   }
 
   private _allRoots(): TreeNodeData<T>[] {

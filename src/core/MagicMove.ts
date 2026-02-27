@@ -67,26 +67,45 @@ function isLineState(state: NodeState): boolean {
   return Array.isArray(state.points) && state.points.length >= 4
 }
 
-function edgeLinkOf(state: NodeState): { fromId: string; toId: string } | null {
+interface LineLink {
+  fromNodeKey: string
+  toNodeKey: string
+}
+
+function edgeLinkOf(state: NodeState): LineLink | null {
   const meta = state.meta
   if (!meta || typeof meta !== 'object') return null
+
+  const fromNodeId = (meta as Record<string, unknown>).fromNodeId
+  const toNodeId = (meta as Record<string, unknown>).toNodeId
+  if (typeof fromNodeId === 'string' && typeof toNodeId === 'string') {
+    return { fromNodeKey: fromNodeId, toNodeKey: toNodeId }
+  }
+
   const fromId = (meta as Record<string, unknown>).fromId
   const toId = (meta as Record<string, unknown>).toId
   if (typeof fromId !== 'string' || typeof toId !== 'string') return null
-  return { fromId, toId }
+  return { fromNodeKey: `circle-${fromId}`, toNodeKey: `circle-${toId}` }
 }
 
 function nodeCenterOf(state: NodeState): [number, number] {
   return [state.x + state.width / 2, state.y + state.height / 2]
 }
 
-function edgePointsFromLink(state: VizState, link: { fromId: string; toId: string }): number[] | null {
-  const from = state.nodes.get(`circle-${link.fromId}`)
-  const to = state.nodes.get(`circle-${link.toId}`)
+function edgePointsFromLink(state: VizState, link: LineLink): number[] | null {
+  const from = state.nodes.get(link.fromNodeKey)
+  const to = state.nodes.get(link.toNodeKey)
   if (!from || !to) return null
   const [fx, fy] = nodeCenterOf(from)
   const [tx, ty] = nodeCenterOf(to)
   return [fx, fy, tx, ty]
+}
+
+function getMetaString(state: NodeState, key: string): string | undefined {
+  const meta = state.meta
+  if (!meta || typeof meta !== 'object') return undefined
+  const value = (meta as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 function isLinkedLineState(state: NodeState): boolean {
@@ -177,11 +196,13 @@ export class MagicMove {
           })
         )
       } else {
+        const isLabel = id.startsWith('label-')
         promises.push(MagicMove.enterNode(node, toState, enterAnim, {
           duration: duration * 0.6,
           easing,
-          delay: baseDelay + index * duration * enterLagRatio,
-          overshoot: enterOvershoot,
+          delay: isLabel ? baseDelay : baseDelay + index * duration * enterLagRatio,
+          overshoot: isLabel ? 1 : enterOvershoot,
+          disableScale: isLabel,
         }))
       }
     }
@@ -255,19 +276,37 @@ export class MagicMove {
     node: IUI,
     toState: NodeState,
     style: 'fade' | 'scale' | 'slide' | 'draw',
-    opts: { duration: number; easing: string; delay?: number; overshoot: number }
+    opts: { duration: number; easing: string; delay?: number; overshoot: number; disableScale?: boolean }
   ): Promise<void> {
-    let fromFrame: Record<string, unknown> = { opacity: 0, scaleX: 0.92, scaleY: 0.92 }
-    const midFrame: Record<string, unknown> = { opacity: 1, scaleX: opts.overshoot, scaleY: opts.overshoot }
-    const toFrame: Record<string, unknown> = { opacity: toState.opacity ?? 1, scaleX: 1, scaleY: 1, y: toState.y }
+    const useScale = !opts.disableScale
+    let fromFrame: Record<string, unknown> = useScale
+      ? { opacity: 0, scaleX: 0.92, scaleY: 0.92 }
+      : { opacity: 0 }
+    const midFrame: Record<string, unknown> = useScale
+      ? { opacity: 1, scaleX: opts.overshoot, scaleY: opts.overshoot }
+      : { opacity: 1 }
+    const toFrame: Record<string, unknown> = useScale
+      ? { opacity: toState.opacity ?? 1, scaleX: 1, scaleY: 1, y: toState.y }
+      : { opacity: toState.opacity ?? 1 }
+    const enterFromFill = getMetaString(toState, 'enterFromFill')
 
-    if (style === 'scale') {
+    if (style === 'scale' && useScale) {
       fromFrame = { ...fromFrame, scaleX: 0.72, scaleY: 0.72 }
     } else if (style === 'slide') {
       fromFrame = { ...fromFrame, y: (toState.y ?? 0) - 20 }
+      toFrame.y = toState.y
     }
 
-    let keyframes: Array<Record<string, unknown>> = [fromFrame, midFrame, toFrame]
+    if (toState.fill !== undefined) {
+      const fromFill = enterFromFill ?? toState.fill
+      fromFrame.fill = fromFill
+      midFrame.fill = fromFill
+      toFrame.fill = toState.fill
+    }
+
+    let keyframes: Array<Record<string, unknown>> = useScale
+      ? [fromFrame, midFrame, toFrame]
+      : [fromFrame, toFrame]
 
     if (style === 'draw') {
       const transparent = 'rgba(0,0,0,0)'

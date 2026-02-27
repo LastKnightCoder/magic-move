@@ -22,7 +22,10 @@
     .demo-section.active { display: block; }
     .demo-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #f1f5f9; }
     .demo-section p { font-size: 13px; color: #64748b; margin-bottom: 20px; }
-    .canvas-wrap { background: #f8fafc; border-radius: 12px; overflow: hidden; display: block; width: 100%; }
+    .canvas-wrap {
+      background: #f8fafc; border-radius: 12px; overflow: hidden;
+      display: inline-block; width: fit-content; max-width: 100%;
+    }
     .controls { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
     .controls button {
       padding: 8px 18px; border-radius: 8px; border: none;
@@ -30,7 +33,10 @@
     }
     .controls button:hover { opacity: 0.85; }
     .controls button:disabled { opacity: 0.4; cursor: not-allowed; }
-    canvas { display: block; width: 100%; height: auto; }
+    canvas { display: block; width: auto; max-width: 100%; height: auto; }
+    @media (max-width: 980px) {
+      main { padding: 20px; }
+    }
   </style>
 </head>
 <body>

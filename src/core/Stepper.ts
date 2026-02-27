@@ -28,49 +28,69 @@ export class Stepper {
     return this
   }
 
+  /**
+   * 对于已执行过的步骤，优先回放快照而不重复执行 step fn，
+   * 避免在“回退后再次前进”时对底层数据结构做二次 mutation。
+   */
   async next(): Promise<void> {
     if (this._running || this._currentIndex >= this._steps.length - 1) return
     this._running = true
-    this._currentIndex++
-    await this._steps[this._currentIndex].fn()
-    this._snapshots[this._currentIndex + 1] = this._capture()
-    this._running = false
-    this.onStepChange?.(this._state())
+    try {
+      const targetIndex = this._currentIndex + 1
+      this._currentIndex = targetIndex
+      this.onStepChange?.(this._state())
+
+      const existingSnapshot = this._snapshots[targetIndex + 1]
+      if (existingSnapshot) {
+        await this._restore(existingSnapshot)
+      } else {
+        await this._steps[targetIndex].fn()
+        this._snapshots[targetIndex + 1] = this._capture()
+      }
+    } finally {
+      this._running = false
+    }
   }
 
   async prev(): Promise<void> {
     if (this._running || this._currentIndex < 0) return
     this._running = true
-    this._currentIndex--
-    await this._restore(this._snapshots[this._currentIndex + 1])
-    this._running = false
-    this.onStepChange?.(this._state())
+    try {
+      this._currentIndex--
+      this.onStepChange?.(this._state())
+      await this._restore(this._snapshots[this._currentIndex + 1])
+    } finally {
+      this._running = false
+    }
   }
 
   async goto(index: number): Promise<void> {
-    if (index === this._currentIndex) return
-    if (index > this._currentIndex) {
-      if (this._snapshots[index + 1]) {
-        this._currentIndex = index
-        await this._restore(this._snapshots[index + 1])
-        this.onStepChange?.(this._state())
-      } else {
-        while (this._currentIndex < index) await this.next()
-      }
-    } else {
+    if (this._running || index === this._currentIndex) return
+    if (index > this._currentIndex && !this._snapshots[index + 1]) {
+      while (this._currentIndex < index) await this.next()
+      return
+    }
+
+    this._running = true
+    try {
       this._currentIndex = index
-      await this._restore(this._snapshots[index + 1])
       this.onStepChange?.(this._state())
+      await this._restore(this._snapshots[index + 1])
+    } finally {
+      this._running = false
     }
   }
 
   async reset(): Promise<void> {
     if (this._running) return
     this._running = true
-    this._currentIndex = -1
-    await this._restore(this._snapshots[0])
-    this._running = false
-    this.onStepChange?.(this._state())
+    try {
+      this._currentIndex = -1
+      this.onStepChange?.(this._state())
+      await this._restore(this._snapshots[0])
+    } finally {
+      this._running = false
+    }
   }
 
   get currentIndex(): number { return this._currentIndex }
@@ -107,7 +127,7 @@ export class Stepper {
   }
 
   private async _restore(snapshot: Map<BaseViz, VizState>): Promise<void> {
-    await Promise.all([...snapshot.entries()].map(([v, s]) => v.applyState(s)))
+    await Promise.all([...snapshot.entries()].map(([v, s]) => v.applyState(this._cloneVizState(s))))
   }
 
   private _state(): StepperState {

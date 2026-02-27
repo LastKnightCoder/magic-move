@@ -2,6 +2,7 @@ import { Rect } from 'leafer-ui'
 import type { Scene } from '../core/Scene'
 import type { AnimationOptions, VizState, NodeState } from '../core/types'
 import { BaseViz } from '../core/BaseViz'
+import { MagicMove } from '../core/MagicMove'
 
 export interface StackVizOptions {
   x?: number
@@ -47,6 +48,34 @@ export class StackViz<T extends string | number> extends BaseViz {
   computeState(): VizState {
     return this._stateForData(this.data)
   }
+
+  getState(): VizState {
+    const state = super.getState()
+    for (const [id, nodeState] of state.nodes) {
+      if (!id.startsWith('cell-') && !id.startsWith('label-')) continue
+      const indexText = id.slice(id.indexOf('-') + 1)
+      const index = Number.parseInt(indexText, 10)
+      if (!Number.isFinite(index)) continue
+      const value = this.data[index]
+      if (value === undefined) continue
+      nodeState.meta = {
+        ...(nodeState.meta ?? {}),
+        index,
+        value,
+        text: String(value),
+      }
+    }
+    return state
+  }
+
+  async applyState(state: VizState, options?: AnimationOptions): Promise<void> {
+    const before = this.getState()
+    this._ensureNodesFromState(state)
+    await MagicMove.animate(this.nodeMap, before, state, options)
+    const { exit } = MagicMove.diff(before, state)
+    for (const id of exit) this.unregister(id)
+  }
+
   async push(value: T, opts?: AnimationOptions): Promise<void> {
     this.data.push(value)
     const i = this.data.length - 1
@@ -119,5 +148,62 @@ export class StackViz<T extends string | number> extends BaseViz {
       nodes.set(`cell-${i}`, { id: `cell-${i}`, x: 0, y: this._yForIndex(i), width: cellWidth, height: cellHeight, fill: fillColor, opacity: 1 })
     })
     return { nodes }
+  }
+
+  private _ensureNodesFromState(state: VizState): void {
+    for (const [id, nodeState] of state.nodes) {
+      if (this.nodeMap.has(id)) continue
+      if (id.startsWith('cell-')) {
+        const rect = new Rect({
+          x: nodeState.x,
+          y: nodeState.y,
+          width: nodeState.width,
+          height: nodeState.height,
+          fill: nodeState.fill ?? this.opts.fillColor,
+          stroke: nodeState.stroke ?? '#a78bfa',
+          strokeWidth: nodeState.strokeWidth ?? 1.5,
+          cornerRadius: nodeState.cornerRadius ?? 6,
+          opacity: nodeState.opacity ?? 1,
+        })
+        this.register(id, rect)
+        continue
+      }
+
+      if (id.startsWith('label-')) {
+        const indexText = id.slice('label-'.length)
+        const index = Number.parseInt(indexText, 10)
+        const text = this._labelTextFromState(state, index, nodeState)
+        const cell = Number.isFinite(index) ? state.nodes.get(`cell-${index}`) : undefined
+        const bounds = {
+          x: cell?.x ?? nodeState.x,
+          y: cell?.y ?? nodeState.y,
+          width: cell?.width ?? nodeState.width,
+          height: cell?.height ?? nodeState.height,
+        }
+        const label = this.createCenteredLabel(text, bounds, {
+          fontSize: this.opts.fontSize,
+          fill: nodeState.fill ?? '#1e293b',
+          opacity: nodeState.opacity ?? 1,
+        })
+        this.registerLabel(id, label)
+      }
+    }
+  }
+
+  private _labelTextFromState(state: VizState, index: number, labelState: NodeState): string {
+    const labelMeta = labelState.meta
+    if (labelMeta && typeof labelMeta === 'object') {
+      const text = (labelMeta as Record<string, unknown>).text
+      if (typeof text === 'string' && text.length > 0) return text
+      const value = (labelMeta as Record<string, unknown>).value
+      if (typeof value === 'string' || typeof value === 'number') return String(value)
+    }
+    const cellState = Number.isFinite(index) ? state.nodes.get(`cell-${index}`) : undefined
+    const cellMeta = cellState?.meta
+    if (cellMeta && typeof cellMeta === 'object') {
+      const value = (cellMeta as Record<string, unknown>).value
+      if (typeof value === 'string' || typeof value === 'number') return String(value)
+    }
+    return Number.isFinite(index) ? String(index) : ''
   }
 }
