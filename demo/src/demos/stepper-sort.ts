@@ -1,4 +1,4 @@
-import { ArrayViz, Scene, Stepper } from '../../src'
+import { ArrayViz, Scene, Stepper } from '../../../src'
 import type { StepperDemoSetupResult } from '../registry'
 import { createStepTextOverlay } from './step-text-overlay'
 

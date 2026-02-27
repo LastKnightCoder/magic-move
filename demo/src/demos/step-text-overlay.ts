@@ -1,5 +1,5 @@
-import { FontManager, Scene, TextViz } from '../../src'
-import type { StepperState } from '../../src'
+import { FontManager, Scene, TextViz } from '../../../src'
+import type { StepperState } from '../../../src'
 
 const FONT_URL = '/fonts/NotoSansCJKsc-Regular.otf'
 

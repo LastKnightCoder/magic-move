@@ -1,5 +1,5 @@
-import { Scene, Stepper, TreeViz } from '../../src'
-import type { TreeNodeData } from '../../src'
+import { Scene, Stepper, TreeViz } from '../../../src'
+import type { TreeNodeData } from '../../../src'
 import type { StepperDemoSetupResult } from '../registry'
 import { createStepTextOverlay } from './step-text-overlay'
 
